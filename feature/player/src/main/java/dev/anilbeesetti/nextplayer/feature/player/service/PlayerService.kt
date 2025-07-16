@@ -356,18 +356,20 @@ class PlayerService : MediaSessionService() {
             )
         }
 
-        // Create a simple LoadControl with better back buffer settings for backward seeking
+        // Create a LoadControl optimized for fast seeking with minimal rebuffering delays
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 /* minBufferMs= */ 50_000,    // 50 seconds min buffer
                 /* maxBufferMs= */ 120_000,   // 2 minutes max buffer  
-                /* bufferForPlaybackMs= */ 2_500,
-                /* bufferForPlaybackAfterRebufferMs= */ 5_000
+                /* bufferForPlaybackMs= */ 500,      // Only 0.5s buffer before starting playback
+                /* bufferForPlaybackAfterRebufferMs= */ 1_000  // 1s buffer after seeking/rebuffering
             )
             .setBackBuffer(
                 /* backBufferDurationMs= */ 30_000,  // 30 seconds back buffer
                 /* retainBackBufferFromKeyframe= */ true
             )
+            .setTargetBufferBytes(64 * 1024 * 1024)  // 64MB target buffer for smooth playback
+            .setPrioritizeTimeOverSizeThresholds(true)  // Prioritize time-based over size-based buffering
             .build()
 
         val player = ExoPlayer.Builder(applicationContext)

@@ -54,6 +54,8 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -264,8 +266,12 @@ class PlayerActivity : AppCompatActivity() {
 
         seekBar.addListener(
             object : TimeBar.OnScrubListener {
+                private var lastScrubPosition = -1L
+                private var isScrubbing = false
+                
                 override fun onScrubStart(timeBar: TimeBar, position: Long) {
                     mediaController?.run {
+                        isScrubbing = true
                         if (isPlaying) {
                             isPlayingOnScrubStart = true
                             pause()
@@ -273,8 +279,19 @@ class PlayerActivity : AppCompatActivity() {
                         isFrameRendered = true
                         scrubStartPosition = currentPosition
                         previousScrubPosition = currentPosition
-                        // Direct seek for start position
-                        seekTo(position)
+                        lastScrubPosition = position
+                        
+                        // Set fast seeking mode for scrubbing
+                        if (this is ExoPlayer) {
+                            setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                        }
+                        
+                        // Only seek on start if the position is significantly different
+                        val seekDistance = kotlin.math.abs(position - currentPosition)
+                        if (seekDistance > 2000) { // Only seek if >2 seconds difference
+                            seekTo(position)
+                        }
+                        
                         showPlayerInfo(
                             info = Utils.formatDurationMillis(position),
                             subInfo = "[${Utils.formatDurationMillisSign(position - scrubStartPosition)}]",
@@ -283,24 +300,20 @@ class PlayerActivity : AppCompatActivity() {
                 }
 
                 override fun onScrubMove(timeBar: TimeBar, position: Long) {
+                    lastScrubPosition = position
+                    
+                    // During scrubbing, minimize actual seeks - only update UI
                     mediaController?.run {
                         val currentTime = System.currentTimeMillis()
-                        val isBackwardSeek = position < currentPosition
+                        val seekDistance = kotlin.math.abs(position - currentPosition)
                         
-                        // Use different throttling strategies for forward vs backward
-                        val throttleMs = if (isBackwardSeek) {
-                            // Less throttling for backward seeks since we have back buffer
-                            30L // ~33fps for backward seeking
-                        } else {
-                            // More throttling for forward seeks to reduce rendering load
-                            50L // ~20fps for forward seeking
-                        }
-                        
-                        if (currentTime - previousScrubPosition > throttleMs) {
+                        // Only seek during scrubbing for large jumps or after longer intervals
+                        if (seekDistance > 10_000 || currentTime - previousScrubPosition > 200) { // 10s jumps or 200ms intervals
                             seekTo(position)
                             previousScrubPosition = currentTime
                         }
                     }
+                    
                     showPlayerInfo(
                         info = Utils.formatDurationMillis(position),
                         subInfo = "[${Utils.formatDurationMillisSign(position - scrubStartPosition)}]",
@@ -308,14 +321,30 @@ class PlayerActivity : AppCompatActivity() {
                 }
 
                 override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) {
+                    isScrubbing = false
                     hidePlayerInfo(0L)
                     scrubStartPosition = -1L
-                    if (!canceled) {
-                        // Final precise seek on stop
-                        mediaController?.seekTo(position)
-                    }
-                    if (isPlayingOnScrubStart) {
-                        mediaController?.play()
+                    
+                    mediaController?.run {
+                        // Set precise seeking for final position
+                        if (this is ExoPlayer) {
+                            setSeekParameters(SeekParameters.EXACT)
+                        }
+                        
+                        if (!canceled) {
+                            // Always perform final seek to exact position when scrubbing stops
+                            seekTo(position)
+                        }
+                        
+                        // Reset seek parameters to default
+                        if (this is ExoPlayer) {
+                            setSeekParameters(SeekParameters.DEFAULT)
+                        }
+                        
+                        // Resume playback immediately after final seek if it was playing
+                        if (isPlayingOnScrubStart) {
+                            play()
+                        }
                     }
                 }
             },
