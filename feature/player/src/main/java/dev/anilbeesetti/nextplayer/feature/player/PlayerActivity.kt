@@ -89,6 +89,7 @@ import dev.anilbeesetti.nextplayer.feature.player.extensions.toTypeface
 import dev.anilbeesetti.nextplayer.feature.player.extensions.togglePlayPause
 import dev.anilbeesetti.nextplayer.feature.player.extensions.toggleSystemBars
 import dev.anilbeesetti.nextplayer.feature.player.extensions.uriToSubtitleConfiguration
+import dev.anilbeesetti.nextplayer.feature.player.scrubbing.OptimizedScrubHandler
 import dev.anilbeesetti.nextplayer.feature.player.service.PlayerService
 import dev.anilbeesetti.nextplayer.feature.player.service.addSubtitleTrack
 import dev.anilbeesetti.nextplayer.feature.player.service.getAudioSessionId
@@ -131,6 +132,7 @@ class PlayerActivity : AppCompatActivity() {
     private var hideVolumeIndicatorJob: Job? = null
     private var hideBrightnessIndicatorJob: Job? = null
     private var hideInfoLayoutJob: Job? = null
+    private var optimizedScrubHandler: OptimizedScrubHandler? = null
 
     private var playInBackground: Boolean = false
     private var isIntentNew: Boolean = true
@@ -265,35 +267,42 @@ class PlayerActivity : AppCompatActivity() {
             object : TimeBar.OnScrubListener {
                 override fun onScrubStart(timeBar: TimeBar, position: Long) {
                     mediaController?.run {
-                        if (isPlaying) {
-                            isPlayingOnScrubStart = true
-                            pause()
+                        // Initialize optimized scrub handler if not already created
+                        if (optimizedScrubHandler == null) {
+                            optimizedScrubHandler = OptimizedScrubHandler(
+                                player = this,
+                                coroutineScope = lifecycleScope,
+                                onScrubStart = { pos ->
+                                    isFrameRendered = true
+                                    scrubStartPosition = currentPosition
+                                    previousScrubPosition = currentPosition
+                                    showPlayerInfo(
+                                        info = Utils.formatDurationMillis(pos),
+                                        subInfo = "[${Utils.formatDurationMillisSign(pos - scrubStartPosition)}]",
+                                    )
+                                },
+                                onScrubMove = { pos ->
+                                    showPlayerInfo(
+                                        info = Utils.formatDurationMillis(pos),
+                                        subInfo = "[${Utils.formatDurationMillisSign(pos - scrubStartPosition)}]",
+                                    )
+                                },
+                                onScrubStop = { _ ->
+                                    hidePlayerInfo(0L)
+                                    scrubStartPosition = -1L
+                                }
+                            )
                         }
-                        isFrameRendered = true
-                        scrubStartPosition = currentPosition
-                        previousScrubPosition = currentPosition
-                        scrub(position)
-                        showPlayerInfo(
-                            info = Utils.formatDurationMillis(position),
-                            subInfo = "[${Utils.formatDurationMillisSign(position - scrubStartPosition)}]",
-                        )
+                        optimizedScrubHandler?.onScrubStart(timeBar, position)
                     }
                 }
 
                 override fun onScrubMove(timeBar: TimeBar, position: Long) {
-                    scrub(position)
-                    showPlayerInfo(
-                        info = Utils.formatDurationMillis(position),
-                        subInfo = "[${Utils.formatDurationMillisSign(position - scrubStartPosition)}]",
-                    )
+                    optimizedScrubHandler?.onScrubMove(timeBar, position)
                 }
 
                 override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) {
-                    hidePlayerInfo(0L)
-                    scrubStartPosition = -1L
-                    if (isPlayingOnScrubStart) {
-                        mediaController?.play()
-                    }
+                    optimizedScrubHandler?.onScrubStop(timeBar, position, canceled)
                 }
             },
         )
@@ -364,6 +373,11 @@ class PlayerActivity : AppCompatActivity() {
         binding.volumeGestureLayout.visibility = View.GONE
         binding.brightnessGestureLayout.visibility = View.GONE
         currentOrientation = requestedOrientation
+        
+        // Cleanup optimized scrub handler
+        optimizedScrubHandler?.cleanup()
+        optimizedScrubHandler = null
+        
         mediaController?.run {
             viewModel.playWhenReady = playWhenReady
             lifecycleScope.launch {
