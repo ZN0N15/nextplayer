@@ -37,6 +37,7 @@ import dev.anilbeesetti.nextplayer.core.common.extensions.round
 import dev.anilbeesetti.nextplayer.core.model.ControlButtonsPosition
 import dev.anilbeesetti.nextplayer.core.model.DoubleTapGesture
 import dev.anilbeesetti.nextplayer.core.model.FastSeek
+import dev.anilbeesetti.nextplayer.core.model.LoopMode
 import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.model.ScreenOrientation
 import dev.anilbeesetti.nextplayer.core.ui.R
@@ -139,6 +140,10 @@ fun PlayerPreferencesScreen(
             AutoplaySetting(
                 isChecked = preferences.autoplay,
                 onClick = viewModel::toggleAutoplay,
+            )
+            LoopModeSetting(
+                currentLoopMode = preferences.loopMode,
+                onClick = { viewModel.showDialog(PlayerPreferenceDialog.LoopModeDialog) },
             )
             PipSetting(
                 isChecked = preferences.autoPip,
@@ -379,6 +384,28 @@ fun PlayerPreferencesScreen(
                         },
                     )
                 }
+
+                PlayerPreferenceDialog.LoopModeDialog -> {
+                    OptionsDialog(
+                        text = stringResource(id = R.string.loop_mode),
+                        onDismissClick = viewModel::hideDialog,
+                    ) {
+                        items(LoopMode.entries.toTypedArray()) { loopMode ->
+                            RadioTextButton(
+                                text = when (loopMode) {
+                                    LoopMode.OFF -> stringResource(R.string.loop_mode_off)
+                                    LoopMode.ONE -> stringResource(R.string.loop_mode_one)
+                                    LoopMode.ALL -> stringResource(R.string.loop_mode_all)
+                                },
+                                selected = (loopMode == preferences.loopMode),
+                                onClick = {
+                                    viewModel.updateLoopMode(loopMode)
+                                    viewModel.hideDialog()
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -506,6 +533,25 @@ fun DefaultPlaybackSpeedSetting(
         title = stringResource(id = R.string.default_playback_speed),
         description = currentDefaultPlaybackSpeed.toString(),
         icon = NextIcons.Speed,
+        onClick = onClick,
+    )
+}
+
+@Composable
+fun LoopModeSetting(
+    currentLoopMode: LoopMode,
+    onClick: () -> Unit,
+) {
+    val description = when (currentLoopMode) {
+        LoopMode.OFF -> stringResource(R.string.loop_mode_off)
+        LoopMode.ONE -> stringResource(R.string.loop_mode_one)
+        LoopMode.ALL -> stringResource(R.string.loop_mode_all)
+    }
+    
+    ClickablePreferenceItem(
+        title = stringResource(R.string.loop_mode),
+        description = description,
+        icon = NextIcons.Replay,
         onClick = onClick,
     )
 }

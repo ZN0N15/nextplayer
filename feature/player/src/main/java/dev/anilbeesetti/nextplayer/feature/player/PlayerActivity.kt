@@ -660,7 +660,15 @@ class PlayerActivity : AppCompatActivity() {
 
         updateLoopModeIcon(playerPreferences.loopMode)
         loopModeButton.setOnClickListener {
-            val currentLoopMode = playerPreferences.loopMode
+            val currentLoopMode = mediaController?.repeatMode?.let { repeatMode ->
+                when (repeatMode) {
+                    Player.REPEAT_MODE_OFF -> LoopMode.OFF
+                    Player.REPEAT_MODE_ONE -> LoopMode.ONE
+                    Player.REPEAT_MODE_ALL -> LoopMode.ALL
+                    else -> LoopMode.OFF
+                }
+            } ?: playerPreferences.loopMode
+            
             val nextLoopMode = when (currentLoopMode) {
                 LoopMode.OFF -> LoopMode.ONE
                 LoopMode.ONE -> LoopMode.ALL
