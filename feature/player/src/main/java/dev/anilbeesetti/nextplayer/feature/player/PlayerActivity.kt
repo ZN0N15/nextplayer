@@ -273,7 +273,7 @@ class PlayerActivity : AppCompatActivity() {
                         isFrameRendered = true
                         scrubStartPosition = currentPosition
                         previousScrubPosition = currentPosition
-                        // Use direct seeking instead of the scrub() function to avoid the optimization conflict
+                        // Direct seek for start position
                         seekTo(position)
                         showPlayerInfo(
                             info = Utils.formatDurationMillis(position),
@@ -283,11 +283,23 @@ class PlayerActivity : AppCompatActivity() {
                 }
 
                 override fun onScrubMove(timeBar: TimeBar, position: Long) {
-                    // Add throttling to reduce seek calls
-                    val currentTime = System.currentTimeMillis()
-                    if (currentTime - previousScrubPosition > 50) { // Throttle to 20fps
-                        mediaController?.seekTo(position)
-                        previousScrubPosition = currentTime
+                    mediaController?.run {
+                        val currentTime = System.currentTimeMillis()
+                        val isBackwardSeek = position < currentPosition
+                        
+                        // Use different throttling strategies for forward vs backward
+                        val throttleMs = if (isBackwardSeek) {
+                            // Less throttling for backward seeks since we have back buffer
+                            30L // ~33fps for backward seeking
+                        } else {
+                            // More throttling for forward seeks to reduce rendering load
+                            50L // ~20fps for forward seeking
+                        }
+                        
+                        if (currentTime - previousScrubPosition > throttleMs) {
+                            seekTo(position)
+                            previousScrubPosition = currentTime
+                        }
                     }
                     showPlayerInfo(
                         info = Utils.formatDurationMillis(position),
@@ -299,6 +311,7 @@ class PlayerActivity : AppCompatActivity() {
                     hidePlayerInfo(0L)
                     scrubStartPosition = -1L
                     if (!canceled) {
+                        // Final precise seek on stop
                         mediaController?.seekTo(position)
                     }
                     if (isPlayingOnScrubStart) {

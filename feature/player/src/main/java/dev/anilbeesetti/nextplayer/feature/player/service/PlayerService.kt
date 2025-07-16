@@ -20,6 +20,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.CommandButton
 import androidx.media3.session.CommandButton.ICON_UNDEFINED
@@ -44,7 +45,7 @@ import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.ui.R as coreUiR
 import dev.anilbeesetti.nextplayer.feature.player.PlayerActivity
 import dev.anilbeesetti.nextplayer.feature.player.R
-import dev.anilbeesetti.nextplayer.feature.player.buffering.OptimizedLoadControl
+import dev.anilbeesetti.nextplayer.feature.player.buffering.ImprovedLoadControl
 import dev.anilbeesetti.nextplayer.feature.player.extensions.addAdditionalSubtitleConfiguration
 import dev.anilbeesetti.nextplayer.feature.player.extensions.switchTrack
 import dev.anilbeesetti.nextplayer.feature.player.extensions.uriToSubtitleConfiguration
@@ -355,9 +356,24 @@ class PlayerService : MediaSessionService() {
             )
         }
 
+        // Create a simple LoadControl with better back buffer settings for backward seeking
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs= */ 50_000,    // 50 seconds min buffer
+                /* maxBufferMs= */ 120_000,   // 2 minutes max buffer  
+                /* bufferForPlaybackMs= */ 2_500,
+                /* bufferForPlaybackAfterRebufferMs= */ 5_000
+            )
+            .setBackBuffer(
+                /* backBufferDurationMs= */ 30_000,  // 30 seconds back buffer
+                /* retainBackBufferFromKeyframe= */ true
+            )
+            .build()
+
         val player = ExoPlayer.Builder(applicationContext)
             .setRenderersFactory(renderersFactory)
             .setTrackSelector(trackSelector)
+            .setLoadControl(loadControl)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
