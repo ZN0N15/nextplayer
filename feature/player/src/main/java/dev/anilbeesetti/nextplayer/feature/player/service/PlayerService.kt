@@ -358,7 +358,6 @@ class PlayerService : MediaSessionService() {
         val player = ExoPlayer.Builder(applicationContext)
             .setRenderersFactory(renderersFactory)
             .setTrackSelector(trackSelector)
-            .setLoadControl(OptimizedLoadControl.Builder().build())
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
